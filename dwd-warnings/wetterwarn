@@ -1,0 +1,31 @@
+#!/usr/bin/env sh
+# Add the dwd warncellid for your location here
+warncellid=000000000
+warnings=$(curl -s https://www.dwd.de/DWD/warnungen/warnapp/json/warnings.json | sed 's/warnWetter.loadWarnings(//g;s/)\;//g' | tr '\n' ' ' | jq --arg id $warncellid '.warnings | .[$id] | .[] | "\(.headline);\(.start);\(.end)" ' 2>/dev/null )
+
+if [ -z "$warnings" ]; then
+	echo "🌩️Wetterwarnungen: 0"
+else
+	echo "🌩️Wetterwarnungen: $(echo "${warnings}" | wc -l)"
+fi
+
+printWarn(){
+	if [ -z "$warnings" ]; then
+		notify-send "Keine Warnungen"
+	else
+		timeout=5000
+		while IFS= read -r w; do
+			warn=$( echo $w | cut -d ';' -f1)
+			wstart=$( echo $w | cut -d ';' -f2 | sed 's/^/@/; s/...$//' | date -f - | sed -r 's/:[0-9]+\sCEST\s[0-9]+//')
+			wend=$( echo $w | cut -d ';' -f3 | sed 's/^/@/; s/...$//' | date -f - | sed -r 's/:[0-9]+\sCEST\s[0-9]+//')
+
+			notify-send -t $timeout "${warn} ${wstart} bis ${wend}"
+			timeout=$(($timeout+4000))
+		done <<< "$(echo "${warnings}" | sed 's/"//g')"
+	fi
+}
+
+case $BLOCK_BUTTON in
+	1) printWarn;;
+	3) firefox "https://www.dwd.de/DE/wetter/warnungen_gemeinden/warnkarten/warnWetter_bay_node.html?bundesland=ssh&ort=YOURLOCATION"
+esac
